@@ -1,0 +1,14 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+
+# R
+.Rhistory
+.RData
+
+# Test results
+.test_results/
+
+# db
+*.db
