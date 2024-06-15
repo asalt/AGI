@@ -1,11 +1,13 @@
 import sys
 import os 
+import inspect
 
 import threading
 import time
 from queue import Queue, Empty
 
 import click
+import time
 
 from tqdm import tqdm
 
@@ -32,23 +34,62 @@ from llm import (
     set_alias,
     remove_alias,
 )
-import logging
-logging.basicConfig(level=logging.INFO)
+# import logging
+# logging.basicConfig(level=logging.INFO)
 
+# local
+from log import get_logger
+from actions import execute_command
+
+#
+
+logger = get_logger(__file__)
 
 cli.logs_db_path = lambda: "memories.db"
 
-PROMPTs = [
-    'you have limited memory. you must manage youro memory carefully. you have a db available of past memories. what questions do you have?'
-]
 if os.environ.get('MODEL') is not None:
     MODEL = os.environ.get('MODEL') 
 else:
     MODEL = "orca-mini-3b-gguf2-q4_0"
-logging.info(f"Using model: {MODEL}")
+logger.info(f"Using model: {MODEL}")
+
+
+INITIAL_INTERVAL = 40
+
 
 
 ### event loop
+
+def think(text, model, conversation):
+    db = get_db()
+
+    response = conversation.prompt(
+f"""** internal response ** 
+use this response to outline your response to the user.
+they will not see it, this is for you to plan.
+""" + text )
+    
+    print("** Internal Thought **\n\n")
+    response = stream_response(response)
+    print("** End of internal thought **\n\n")
+    
+    if db is not None:
+        response.log_to_db(db) # TODO categorize as internal
+
+    response = conversation.prompt(
+f"""** external response **
+this is your external response to the user
+you may choose to say nothing and just "**wait**" or similar.
+don't repeat your inner response, except the actual message you wish to send.
+""" )
+    
+    response = stream_response(response)
+
+    if db is not None:
+        response.log_to_db(db) # TODO categorize as external
+    
+    return conversation
+    
 
 def user_input(queue, model, conversation, db=None):
     """Thread function for handling user input."""
@@ -58,7 +99,7 @@ def user_input(queue, model, conversation, db=None):
     in_multi = False 
     #
     validated_options = dict()
-    click.echo("Chatting with {}".format(model.model_id))
+    click.echo("\nChatting with {}".format(model.model_id))
     click.echo("Type 'exit' or 'quit' to exit")
     click.echo("Type '!multi' to enter multiple lines, then '!end' to finish")
     while True:
@@ -85,55 +126,65 @@ def user_input(queue, model, conversation, db=None):
         if prompt.strip() in ("exit", "quit"):
             break
         system = None #  system message already set
-        response = conversation.prompt(prompt, system, **validated_options)
+        conversation = think(prompt, model, conversation)
         # System prompt only sent for the first message:
-        for chunk in response:
-            print(chunk, end="")
-            sys.stdout.flush()
-        if db is not None:
-            response.log_to_db(db)
+        # for chunk in response:
+        #     print(chunk, end="")
+        #     sys.stdout.flush()
+        # if db is not None:
+        #     response.log_to_db(db)
         print("")
+    return conversation
+
 
 def automated_interaction(queue, model, conversation, db=None, interval=100):
     """Thread function for automated interactions."""
-
+    current_interval = interval
+    tics = 0
     db = get_db()
-    while True:
-        # Check if there is an interruption from the user input
+
+    def handle_event(queue):
         try:
-            message = queue.get_nowait()
-            if message == 'quit':
-                break
-            print(f"Handling user input: {message}")
-            # Here would be the interaction with the model using the message
+            conversation = queue.get_nowait()
+            logger.info("Got a new conversation, resetting loop.")
+            return conversation, True
         except Empty:
-            # No user interruption, proceed with scheduled message
+            return None, False
 
-            # print("Sending scheduled prompt to the model...")
-            # Wait for the next scheduled time
-            step_duration = interval / 100
-            time.sleep(interval)
-            # for _ in tqdm(range(100), desc="Boredom counter: "):
-            #    time.sleep(step_duration)
+    while True:
+        start_time = time.time()
+        received_new_message = False
 
-            response = conversation.prompt("""**This is an internal message not from the user**
-it is an internal thought. 
-it has been some time without user input and you are getting bored. 
-refer to the recent topic. reiterate or re-ask a question.
-if there was no recent topic or question at hand, then..
-tell a joke. make up a rhyme. say something interesting. address the user. 
-the user does not know about this message.
-""")
-            response = stream_response(response)
-            if db is not None:
-                response.log_to_db(db)
+        while time.time() - start_time < current_interval:
+            new_conversation, received = handle_event(queue)
+            if received:
+                conversation = new_conversation
+                received_new_message = True
+                #start_time = time.time()
+                logger.info('exiting inner loop')
+                break  # Break from the inner while loop to process new message immediately
 
+        if not received_new_message:  # Check if the loop exited without receiving new message
+            logger.info('Waited too long. Got bored.')
+            tics += 1
+            internal_thought = f"""**This is an internal message not from the user**
+It has been some time without user input and you are getting bored.
+Refer to the recent topic. Reiterate or re-ask a question.
+If there was no recent topic or question at hand, then..
+Tell a joke. Make up a rhyme. Say something interesting. Address the user.
+The user does not know about this message.
+So far it has been {tics} 'moments' with no input.
+The larger the number, the more bored you are"""
+            conversation = think(internal_thought, model, conversation)
+
+            current_interval = interval * (1.1 + tics)
 
 
 
 def event_loop(model, conversation, db):
     queue = Queue()
-    interval = 10  # Interval in seconds for automated messages
+    # interval = 100  # Interval in seconds for automated messages
+    interval = INITIAL_INTERVAL # global var defined at top
 
     # Create threads
     automated_thread = threading.Thread(target=automated_interaction, args=(queue, model, conversation, db, interval ))
@@ -146,8 +197,10 @@ def event_loop(model, conversation, db):
     # Wait for threads to finish
     user_thread.join()
     automated_thread.join()
+    #import ipdb; ipdb.set_trace()
 
     print("Conversation ended.")
+    # return conversation # how to do this?
 
 ### db stuff
 
@@ -158,66 +211,19 @@ def get_db():
     migrate(db)
     return db
 
-def log_to_db(db, response):
-    """ Log the response to the database. """
-    response.log_to_db(db)
+# def log_to_db(db, response):
+#     """ Log the response to the database. """
+#     response.log_to_db(db)
 
 def query_db(db, query):
     """ Run a specific query on the database and return results. """
     return list(db.query(query))
 
-def get_response(model, prompt):
-    """ Send a prompt to the model and return the response. """
-    prompt_method = model.prompt
-    return prompt_method(prompt)
+# def get_response(model, prompt):
+#     """ Send a prompt to the model and return the response. """
+#     prompt_method = model.prompt
+#     return prompt_method(prompt)
 
-def _xx_main():
-    db = get_db()
-    model = get_model(MODEL)
-
-    # Initial interaction
-    response = get_response(model, PROMPT)
-    log_to_db(db, response)
-
-    # Follow-up interaction
-    conv_query = "select * from conversations"
-    conversations = query_db(db, conv_query)
-    resp_query = "select * from responses"
-    responses = query_db(db, resp_query)
-    follow_up_prompt = f"""
-    No look you do have memories! they're in this database called memories.db
-    look i run this sql {conv_query} and get `{conversations}`
-    and if i run {resp_query} I get {responses}.
-    So every time we chat it is saved and you can revisit! how cool is that!?
-    so if you want to review any memories just tell me what you want to see, can use raw sql format it's just sqlite here nice and simple.
-    """
-    follow_up_response = get_response(model, follow_up_prompt)
-    log_to_db(db, follow_up_response)
-
-def _xmain():
-
-    log_path = cli.logs_db_path()
-    db = sqlite_utils.Database(log_path)
-    migrate(db)
-
-    model = get_model(MODEL)
-    prompt_method = model.prompt
-    response = prompt_method(PROMPTs[0])
-    response_txt = response.text
-
-
-    response.log_to_db(db)
-
-    prompt2 = f"""
-    No look you do have memories! they're in this database called memories.db
-    look i run this code and get `list(db.query('select * from conversations'))` == {list(db.query('select * from conversations'))}
-    and if i run `list(db.query('select * from responses'))` I get {list(db.query('select * from responses'))}.
-    So every time we chat it is saved and you can revisit! how cool is that!?
-    so if you want to review any memories just tell me what you want to see, can use raw sql format it's just sqlite here nice and simple.
-"""
-    response2 = prompt_method(prompt2)
-    response2.log_to_db(db)
-    response_txt = response.text
 
 def stream_response(response):
     for chunk in response:
@@ -243,18 +249,25 @@ def intro():
     system = open("../prompts/system/file0.txt").read()
     prompt = f"""Hello, your name is {os.environ.get('USER', 'AGI')}. You are a helpful assistant. 
 This is your intiation prompt. You are about to incorporated into an event loop whereby you way user input.
-You can start the conversation by saying hi or something.
-Also confirm you understand these instructions.
+You can start the conversation by saying hi or something. Be yourself.
 """
-    response = conversation.prompt(prompt,
-                             system=system,
-                             # template=template # this isn't working, need to understand how to make an appropriate template
-                             )
+   #prompt += f"when you respond use this format:
 
-    response = stream_response(response)
-    response.log_to_db(db)
+   # prompt += f"""
+   # You have a variety of commands available to you.
+   # Here's one that let's you run commands on the default shell. 
+   # Maybe the user would like you to search the filesystem, for example.
 
+   # {inspect.getsource(execute_command)} """#
+    conversation = think(prompt, model, conversation)
     event_loop(model, conversation, db)
+    # response = conversation.prompt(prompt,
+    #                          system=system,
+    #                          )
+
+    # response = stream_response(response)
+    # response.log_to_db(db)
+
 
 
 def main():
@@ -262,3 +275,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    #import ipdb; ipdb.set_trace()
