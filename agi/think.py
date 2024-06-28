@@ -1,42 +1,42 @@
 # think.py
-# an early sketch trying to figure out the event loop
-from queue import Queue, Empty
-import threading
-import time
 
-def thinking_thread(queue, thinker):
-    while True:
-        try:
-            # Check for new input, with a timeout
-            prompt = queue.get(timeout=1)  # Adjust timeout as needed
-            thinker.update_state('last_user_interaction', datetime.now())
-            response = thinker.think(prompt)
-            print(response)
-        except Empty:
-            # No input received, proceed with regular thinking
-            thinker.perform_regular_thinking()
+from agi.db import get_db
+from agi.log import get_logger_async
 
-def user_input_thread(queue):
-    while True:
-        user_input = input("> ")
-        queue.put(user_input)
-        if user_input.lower() in ["exit", "quit"]:
-            break
 
-def run_conversation():
-    conversation_queue = Queue()
-    conversation_thinker = Think(conversation=None, db=get_db())  # Setup Think instance
+def stream_response(response):
+    for chunk in response:
+        print(chunk, end='')
+        sys.stdout.flush()
+    print("")
+    return response
 
-    # Create threads for thinking and user input
-    thinker_thread = threading.Thread(target=thinking_thread, args=(conversation_queue, conversation_thinker))
-    input_thread = threading.Thread(target=user_input_thread, args=(conversation_queue,))
+async def think(text, conversation):
+    db = get_db()
 
-    # Start threads
-    thinker_thread.start()
-    input_thread.start()
+    response = conversation.prompt(
+f"""** internal response ** 
+use this response to outline your response to the user.
+they will not see it, this is for you to plan.
+""" + text )
+    
+    print("** Internal Thought **\n\n")
+    response = stream_response(response)
+    print("** End of internal thought **\n\n")
+    
+    if db is not None:
+        response.log_to_db(db) # TODO categorize as internal
 
-    # Wait for threads to complete
-    input_thread.join()
-    thinker_thread.join()
+    response = conversation.prompt(
+f"""** external response **
+this is your external response to the user
+you may choose to say nothing and just "**wait**" or similar.
+don't repeat your inner response, except the actual message you wish to send.
+""" )
+    
+    response = stream_response(response)
 
-run_conversation()
+    if db is not None:
+        response.log_to_db(db) # TODO categorize as external
+    
+    return conversation

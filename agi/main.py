@@ -39,7 +39,9 @@ from llm import (
 
 # local
 from .log import get_logger
-from .actions import execute_command
+#from .actions import execute_command
+from agi.think import think
+from agi import chat
 
 #
 
@@ -259,8 +261,7 @@ You can start the conversation by saying hi or something. Be yourself.
    # Maybe the user would like you to search the filesystem, for example.
 
    # {inspect.getsource(execute_command)} """#
-    conversation = think(prompt, model, conversation)
-    event_loop(model, conversation, db)
+    #event_loop(conversation, db)
     # response = conversation.prompt(prompt,
     #                          system=system,
     #                          )
@@ -268,10 +269,15 @@ You can start the conversation by saying hi or something. Be yourself.
     # response = stream_response(response)
     # response.log_to_db(db)
 
+    conversation = think(prompt, conversation)
+    return conversation
 
 
 def main():
-    intro()
+    conversation = intro()
+    chat(conversation)
+    # model = get_model(MODEL)
+    #conversation = Conversation(model=model)
 
 if __name__ == "__main__":
     main()

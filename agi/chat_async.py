@@ -6,42 +6,14 @@ import aioconsole
 import datetime
 
 from agi.event_loop_async import PriorityQueue, QueueEmpty
+from agi.think import think
+
 
 #from agi.status_utils import print_status, print_body, print_footer, console, layout  # Import the console for direct use if needed
 
-# from rich.console import Console
-from rich.prompt import Prompt
-from rich.panel import Panel
-
-# 
-# console = Console()
-
-
 from agi.log import get_logger, get_logger_async
 logger = get_logger_async(__file__)
-
-
-# from rich.console import Console
-# from rich.layout import Layout
-# 
-# console = Console()
-# layout = Layout()
-# layout.split(
-#     Layout(name='output', size=10),
-#     Layout(name='input', size=3)
-# )
-# console.print(layout)
-
-
-# async def ui_updater(queue):
-#     while True:
-#         try:
-#             message, area = await queue.get()  # Expecting a tuple with message and area
-#             layout[area].update(message)
-#             console.print(layout)
-#         except QueueEmpty:
-#             await asyncio.sleep(0.1)  # Short pause to ensure the clear is rendered
-
+from agi.db import get_db
 
 def print_status(message):
     # Clear the current input line and print the message
@@ -53,11 +25,7 @@ def print_status(message):
     sys.stdout.flush()
 
 
-
-
-
-
-async def worker(name, priority_queue, boredom_counter, initial_tic_threshold=10):
+async def worker(name, priority_queue, boredom_counter, initial_tic_threshold=10, conversation=None):
 
     tic_threshold = initial_tic_threshold
     while True:
@@ -67,6 +35,7 @@ async def worker(name, priority_queue, boredom_counter, initial_tic_threshold=10
             # response
             current_time = datetime.datetime.now().strftime("%H:%M:%S")
             print_status(f"{current_time}:  {name} received the message to be\n{task}")
+            conversation = await think(task, conversation)
             # await update_queue.put((f"{current_time}:  {name} understood the message to be\n{task}", 'output'))
 
             #await asyncio.sleep(1)  # Simulate task processing
@@ -108,14 +77,14 @@ async def chat_user_input(priority_queue, msg="Enter text here: "):
         # sys.stdout.write("\x1b[u")  # Restore cursor position
 
 
-async def main():
+async def main(conversation=None):
     # update_queue = asyncio.Queue()
     # updater_task = asyncio.create_task(ui_updater(update_queue))
 
     priority_queue = PriorityQueue()
     boredom_counter = {'count': 0}
 
-    workers = [asyncio.create_task(worker(f"Worker {i}", priority_queue, boredom_counter)) for i in range(1)]
+    workers = [asyncio.create_task(worker(f"Worker {i}", priority_queue, boredom_counter, conversation=conversation)) for i in range(1)]
     #worker = asyncio.create_task(worker(f"worker {1}", queue, boredom_counter))
     user_input_task = asyncio.create_task(chat_user_input(priority_queue))
 
