@@ -41,8 +41,19 @@ logger = get_logger_async(__file__)
 #             console.print(layout)
 #         except QueueEmpty:
 #             await asyncio.sleep(0.1)  # Short pause to ensure the clear is rendered
+
+
 def print_status(message):
+    # Clear the current input line and print the message
+    sys.stdout.write("\033[F\033[K")
     print(message)
+    print('\n\n')
+    # Redisplay the input prompt without waiting for input
+    sys.stdout.write("Enter text here: ")
+    sys.stdout.flush()
+
+
+
 
 
 
@@ -55,7 +66,7 @@ async def worker(name, priority_queue, boredom_counter, initial_tic_threshold=10
             logger.debug(f"{name} got a task: {task}")
             # response
             current_time = datetime.datetime.now().strftime("%H:%M:%S")
-            print_status(f"{current_time}:  {name} understood the message to be\n{task}")
+            print_status(f"{current_time}:  {name} received the message to be\n{task}")
             # await update_queue.put((f"{current_time}:  {name} understood the message to be\n{task}", 'output'))
 
             #await asyncio.sleep(1)  # Simulate task processing
@@ -76,7 +87,7 @@ async def worker(name, priority_queue, boredom_counter, initial_tic_threshold=10
 
 async def chat_user_input(priority_queue, msg="Enter text here: "):
     while True:
-        user_input = await aioconsole.ainput(msg)
+        user_input = await aioconsole.ainput()
 
         #user_input = await asyncio.to_thread(Prompt.ask, "", console=console)
 
@@ -108,6 +119,7 @@ async def main():
     #worker = asyncio.create_task(worker(f"worker {1}", queue, boredom_counter))
     user_input_task = asyncio.create_task(chat_user_input(priority_queue))
 
+    print_status("Enter text here: ")
     await asyncio.gather(*workers, user_input_task)
 
 asyncio.run(main())
