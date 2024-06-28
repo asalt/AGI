@@ -4,6 +4,7 @@ import inspect
 
 import threading
 import time
+import asyncio
 from queue import Queue, Empty
 
 import click
@@ -38,10 +39,10 @@ from llm import (
 # logging.basicConfig(level=logging.INFO)
 
 # local
-from .log import get_logger
+from agi.log import get_logger
 #from .actions import execute_command
 from agi.think import think
-from agi import chat
+from agi import chat_async
 
 #
 
@@ -62,35 +63,35 @@ INITIAL_INTERVAL = 40
 
 ### event loop
 
-def think(text, model, conversation):
-    db = get_db()
-
-    response = conversation.prompt(
-f"""** internal response ** 
-use this response to outline your response to the user.
-they will not see it, this is for you to plan.
-""" + text )
-    
-    print("** Internal Thought **\n\n")
-    response = stream_response(response)
-    print("** End of internal thought **\n\n")
-    
-    if db is not None:
-        response.log_to_db(db) # TODO categorize as internal
-
-    response = conversation.prompt(
-f"""** external response **
-this is your external response to the user
-you may choose to say nothing and just "**wait**" or similar.
-don't repeat your inner response, except the actual message you wish to send.
-""" )
-    
-    response = stream_response(response)
-
-    if db is not None:
-        response.log_to_db(db) # TODO categorize as external
-    
-    return conversation
+# def think(text, model, conversation):
+#     db = get_db()
+# 
+#     response = conversation.prompt(
+# f"""** internal response ** 
+# use this response to outline your response to the user.
+# they will not see it, this is for you to plan.
+# """ + text )
+#     
+#     print("** Internal Thought **\n\n")
+#     response = stream_response(response)
+#     print("** End of internal thought **\n\n")
+#     
+#     if db is not None:
+#         response.log_to_db(db) # TODO categorize as internal
+# 
+#     response = conversation.prompt(
+# f"""** external response **
+# this is your external response to the user
+# you may choose to say nothing and just "**wait**" or similar.
+# don't repeat your inner response, except the actual message you wish to send.
+# """ )
+#     
+#     response = stream_response(response)
+# 
+#     if db is not None:
+#         response.log_to_db(db) # TODO categorize as external
+#     
+#     return conversation
     
 
 def user_input(queue, model, conversation, db=None):
@@ -235,7 +236,7 @@ def stream_response(response):
     return response
 
 
-def intro():
+async def intro():
 
     # log_path = cli.logs_db_path()
     # db = sqlite_utils.Database(log_path)
@@ -269,16 +270,16 @@ You can start the conversation by saying hi or something. Be yourself.
     # response = stream_response(response)
     # response.log_to_db(db)
 
-    conversation = think(prompt, conversation)
+    conversation = await think(prompt, conversation)
     return conversation
 
 
-def main():
-    conversation = intro()
-    chat(conversation)
+async def main():
+    conversation = await intro()
+    await chat_async.main(conversation)
     # model = get_model(MODEL)
     #conversation = Conversation(model=model)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
     #import ipdb; ipdb.set_trace()

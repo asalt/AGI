@@ -1,5 +1,5 @@
 # think.py
-
+import sys
 from agi.db import get_db
 from agi.log import get_logger_async
 

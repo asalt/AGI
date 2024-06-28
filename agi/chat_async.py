@@ -48,7 +48,7 @@ async def worker(name, priority_queue, boredom_counter, initial_tic_threshold=10
             boredom_counter['count'] += 1
             await asyncio.sleep(1)
         if boredom_counter['count'] > tic_threshold:
-            await priority_queue.put((f"I'm bored, I've been waiting {tic_threshold} ticks!", "internal"), priority=2)
+            await priority_queue.put((f"**INTERNAL THOUGHT** I (the AI) has been waiting {tic_threshold} ticks! (this is not a user message)", "internal"), priority=2)
             tic_threshold = tic_threshold * 1.2
             logger.debug(f"{name} is bored after {tic_threshold} ticks.")
             boredom_counter['count'] = 0
@@ -91,4 +91,5 @@ async def main(conversation=None):
     print_status("Enter text here: ")
     await asyncio.gather(*workers, user_input_task)
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
