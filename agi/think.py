@@ -1,5 +1,6 @@
 # think.py
 import sys
+import asyncio
 from agi.db import get_db
 from agi.log import get_logger_async
 
@@ -10,6 +11,17 @@ def stream_response(response):
         sys.stdout.flush()
     print("")
     return response
+
+
+# async def stream_response(response):
+#     loop = asyncio.get_event_loop()
+#     # Run the blocking operation in an executor
+#     await loop.run_in_executor(None, lambda: list(response))
+#     for chunk in response._chunks:  # Assuming _chunks holds all the output after forced iteration
+#         print(chunk, end='')
+#         sys.stdout.flush()
+#     print("")
+#     return response
 
 async def think(text, conversation):
     db = get_db()
