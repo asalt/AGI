@@ -1,5 +1,15 @@
+import sys
 import asyncio
 import heapq
+
+from agi.status_utils import print_status, console  # Import the console for direct use if needed
+
+
+# def print_status(message):
+#     sys.stdout.write("\x1b[s\x1b[1A\x1b[2K")  # Move cursor up and clear line
+#     print(message)
+#     sys.stdout.write("\x1b[u")  # Restore cursor position
+
 
 class PriorityQueue:
     def __init__(self):
@@ -13,7 +23,8 @@ class PriorityQueue:
     async def get(self):
         if self._queue:
             item = heapq.heappop(self._queue)[-1]
-            print(f"received {item}")
+            return item
+            # print_status(item)
         raise QueueEmpty()
 
 class QueueEmpty(Exception):
