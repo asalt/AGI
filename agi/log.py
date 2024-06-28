@@ -18,3 +18,19 @@ def get_logger(name):
     logger.addHandler(stream_handler)
 
     return logger
+
+from concurrent_log_handler import ConcurrentRotatingFileHandler
+
+def get_logger_async(name):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+
+    # Set up a specific handler to handle multi-process logging
+    log_filename = 'app.log'
+    rotate_handler = ConcurrentRotatingFileHandler(log_filename, "a", 512*1024, 5)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    rotate_handler.setFormatter(formatter)
+    logger.addHandler(rotate_handler)
+
+    logger.propagate = False
+    return logger
