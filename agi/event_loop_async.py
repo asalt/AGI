@@ -2,7 +2,7 @@ import sys
 import asyncio
 import heapq
 
-from agi.status_utils import print_status, console  # Import the console for direct use if needed
+# from agi.status_utils import print_status, print_main, print_bottom, console  # Import the console for direct use if needed
 
 
 # def print_status(message):
