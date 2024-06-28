@@ -38,8 +38,8 @@ from llm import (
 # logging.basicConfig(level=logging.INFO)
 
 # local
-from log import get_logger
-from actions import execute_command
+from .log import get_logger
+from .actions import execute_command
 
 #
 
