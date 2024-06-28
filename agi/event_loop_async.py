@@ -2,13 +2,17 @@ import sys
 import asyncio
 import heapq
 
-# from agi.status_utils import print_status, print_main, print_bottom, console  # Import the console for direct use if needed
+class Task:
+    def __init__(self, message, input_type, priority):
+        self.message = message
+        self.input_type = input_type
+        self.priority = priority
 
+    def __lt__(self, other):
+        return self.priority < other.priority
 
-# def print_status(message):
-#     sys.stdout.write("\x1b[s\x1b[1A\x1b[2K")  # Move cursor up and clear line
-#     print(message)
-#     sys.stdout.write("\x1b[u")  # Restore cursor position
+    def __repr__(self):
+        return f"Task: {self.message}, priority: {self.priority}"
 
 
 class PriorityQueue:
@@ -16,8 +20,8 @@ class PriorityQueue:
         self._queue = []
         self._index = 0
     
-    async def put(self, item, priority):
-        heapq.heappush(self._queue, (priority, self._index, item))
+    async def put(self, task):
+        heapq.heappush(self._queue, (task.priority, self._index, task))
         self._index += 1
     
     async def get(self):
